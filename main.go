@@ -6,13 +6,17 @@ import (
     "os/exec"
     "path/filepath"
     "github.com/labstack/echo/v4"
-	"bytes"
-    "io/ioutil"
 )
 
 // Estructura para recibir el JSON
 type DownloadRequest struct {
-    Type string `json:"type"`
+    ID                string `json:"id"`
+    Type              string `json:"type"`
+    NameDescomprimido string `json:"name_descomprimido"`
+    Download          string `json:"download"`
+    RouteDestino      string `json:"route_destino"`
+    Service           string `json:"service"`
+    ControlFile       string `json:"control_file"`
 }
 
 func main() {
@@ -24,65 +28,45 @@ func main() {
             return c.String(http.StatusBadRequest, "JSON inválido: "+err.Error())
         }
 
-        t := req.Type
-        url := "https://abkaerp.com/documentos/filedeskv2/updatev2/new/v5/public_https.zip"
-        zipFile := "public_https.zip"
-		unzippedFolder := "public_https"
-		nivel2Folder := filepath.Join("nivel2", unzippedFolder)
+        switch req.Type {
+        case "backend":
+            updateDir := "update"
+            zipFile := req.NameDescomprimido + ".zip"
+            unzippedFolder := req.NameDescomprimido
 
-        switch t {
-        case "normal":
-			if fileExists(zipFile) {
-                return c.String(http.StatusOK, "El archivo ya fue descargado.")
+            // Crear carpeta update si no existe
+            if err := os.MkdirAll(updateDir, 0755); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
             }
-            if err := downloadAndUnzip(url, zipFile); err != nil {
+
+            // Descargar y descomprimir
+            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
             }
-            os.Remove(zipFile)
-            return c.String(http.StatusOK, "Proceso completado para type: "+t)
 
-        case "move":
-			if fileExists(nivel2Folder) {
-                return c.String(http.StatusOK, "La carpeta ya fue movida a nivel2.")
+            // Mover/reemplazar en destino
+            destPath := filepath.Join(req.RouteDestino, unzippedFolder)
+            if err := moveAndReplace(unzippedFolder, req.RouteDestino); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al mover/reemplazar: "+err.Error())
             }
-            if err := exec.Command("mkdir", "-p", "nivel2").Run(); err != nil {
-  				return c.String(http.StatusInternalServerError, "Error al crear carpeta: "+err.Error())
-			}
-			if err := exec.Command("chmod", "555", "nivel2").Run(); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al cambiar permisos de la carpeta: "+err.Error())
-			}
-            // Mover la carpeta descomprimida a nivel2
-            if err := exec.Command("mv", "-f", unzippedFolder, "nivel2/").Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al mover carpeta: "+err.Error())
+
+            // Dar permisos
+            if err := setPermissions(destPath, "777"); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al dar permisos: "+err.Error())
             }
-           
-            return c.String(http.StatusOK, "Proceso completado para type: "+t)
-		case "permissions":
-			targetFolder := unzippedFolder
-			if fileExists(nivel2Folder) {
-                targetFolder = nivel2Folder
+
+            // Reiniciar servicio
+            serviceName := "filedesk-cloud." + req.Service
+            if err := restartService(serviceName); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
             }
-			if has777Permissions(targetFolder) {
-                return c.String(http.StatusOK, "La carpeta ya tiene permisos 777.")
+
+            // Crear archivo de control en la ruta recibida por JSON
+            if err := createFile(req.ControlFile); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear archivo de control: "+err.Error())
             }
-            if err := downloadAndUnzip(url, zipFile); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
-            }
-            // Otorgar todos los permisos a la carpeta descomprimida
-			if err := exec.Command("sudo", "chmod", "-R", "777", unzippedFolder).Run(); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al cambiar permisos: "+err.Error())
-			}
-    
-            return c.String(http.StatusOK, "Permisos otorgados a la carpeta "+unzippedFolder)
-		case "reset":
-			// Realiza una petición POST al servidor en el puerto 8081
-			resp, err := http.Post("http://localhost:8081/restart", "application/json", bytes.NewBuffer([]byte("{}")))
-			if err != nil {
-				return c.String(http.StatusInternalServerError, "Error al contactar el servidor en 8081: "+err.Error())
-			}
-			defer resp.Body.Close()
-			body, _ := ioutil.ReadAll(resp.Body)
-			return c.String(http.StatusOK, "Respuesta del servidor 8081: "+string(body))
+
+            return c.String(http.StatusOK, "Proceso backend completado correctamente.")
 
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
@@ -92,27 +76,35 @@ func main() {
     e.Logger.Fatal(e.Start(":8080"))
 }
 
-func downloadAndUnzip(url, zipFile string) error {
+func downloadAndUnzip(url, zipFile, dir string) error {
+    // Descargar el archivo zip en la carpeta update
     if err := exec.Command("wget", "-O", zipFile, url).Run(); err != nil {
         return err
     }
-    if err := exec.Command("unzip", "-o", zipFile).Run(); err != nil {
+    // Descomprimir el archivo dentro de la carpeta update
+    cmd := exec.Command("unzip", "-o", zipFile, "-d", dir)
+    if err := cmd.Run(); err != nil {
         return err
     }
     return nil
 }
 
-func fileExists(path string) bool {
-    _, err := os.Stat(path)
-    return err == nil
+func moveAndReplace(folder, dest string) error {
+    return exec.Command("mv", "-f", folder, dest).Run()
 }
 
-func has777Permissions(path string) bool {
-    info, err := os.Stat(path)
+func setPermissions(path, perms string) error {
+    return exec.Command("sudo", "chmod", "-R", perms, path).Run()
+}
+
+func restartService(service string) error {
+    return exec.Command("sudo", "systemctl", "restart", service).Run()
+}
+
+func createFile(path string) error {
+    f, err := os.Create(path)
     if err != nil {
-        return false
+        return err
     }
-    mode := info.Mode().Perm()
-    // 0777 == rwxrwxrwx
-    return mode == 0777
+    return f.Close()
 }
