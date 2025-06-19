@@ -15,6 +15,7 @@ type DownloadRequest struct {
     NameDescomprimido string `json:"name_descomprimido"`
     Download          string `json:"download"`
     RouteDestino      string `json:"route_destino"`
+	RouteOrigen       string `json:"route_origen"`
     Service           string `json:"service"`
     ControlFile       string `json:"control_file"`
 }
@@ -127,7 +128,29 @@ func main() {
             }
 
             return c.String(http.StatusOK, "Proceso 'resources' completado correctamente.")
+		case "reiniciador":
+			// Usamos el campo 'service' que ya existía
+			if req.Service == "" {
+				return c.String(http.StatusBadRequest, "El campo 'service' es requerido para reiniciar un servicio.")
+			}
+			
+			// MEJORA DE SEGURIDAD: Lista blanca de servicios permitidos
+			serviciosPermitidos := map[string]bool{
+				"filedesk-cloud.service": true,
+				"nginx.service":          true,
+				// Añade aquí otros servicios que quieras permitir
+			}
 
+			if !serviciosPermitidos[req.Service] {
+				return c.String(http.StatusForbidden, "Error: El reinicio del servicio '"+req.Service+"' no está permitido.")
+			}
+
+			// Usamos la función existente para reiniciar
+			if err := restartService(req.Service); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
+			}
+			
+			return c.String(http.StatusOK, "Servicio '"+req.Service+"' reiniciado correctamente.")
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
         }
