@@ -91,11 +91,14 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 
 func download(url, file, dir string) error {
     // Descargar el archivo zip en la carpeta update
-    if err := exec.Command("wget", "-O", file, url).Run(); err != nil {
-        return err
-    }
-    return nil
+    updateDir := dir
+	filePath := filepath.Join(updateDir, file)
+	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
+		return err
+	}
+		return nil
 }
+
 func moveAndReplace(folder, dest string) error {
     return exec.Command("mv", "-f", folder, dest).Run()
 }
