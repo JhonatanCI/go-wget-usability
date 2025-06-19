@@ -72,7 +72,7 @@ func main() {
 		
 		case "public":
             zipFile := req.NameDescomprimido + ".zip"
-            unzippedFolder := req.NameDescomprimido
+            unzippedFolder := req.NameDescomprimido 
 
             if err := os.MkdirAll(updateDir, 0755); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
@@ -110,21 +110,27 @@ func main() {
     e.Logger.Fatal(e.Start(":8080"))
 }
 
+
 func downloadAndUnzip(url, zipFile, dir string) error {
-    // Descargar el archivo zip en la carpeta update
-    updateDir := dir
+	// Descargar el archivo zip en la carpeta 'update'
+	updateDir := dir
 	filePath := filepath.Join(updateDir, zipFile)
 	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
-		return err
+		return err // Si wget falla, retornamos el error
 	}
-    // Descomprimir el archivo dentro de la carpeta update
-    cmd := exec.Command("unzip", "-o", filePath, "-d", dir)
-    if err := cmd.Run(); err != nil {
-        return err
-    }
-    return nil
-}
 
+	cmd := exec.Command("unzip", "-o", zipFile)
+
+	// Aquí está la magia: establece el directorio de trabajo para este comando.
+	cmd.Dir = dir // dir es "update"
+
+	// Ejecutamos el comando 'unzip' desde la carpeta 'update'
+	if err := cmd.Run(); err != nil {
+		return err // Si unzip falla, retornamos el error
+	}
+
+	return nil
+}
 func download(url, file, dir string) error {
     // Descargar el archivo zip en la carpeta update
     updateDir := dir
