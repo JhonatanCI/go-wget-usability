@@ -24,6 +24,7 @@ func main() {
         t := req.Type
         url := "https://abkaerp.com/documentos/filedeskv2/updatev2/new/v5/public_https.zip"
         zipFile := "public_https.zip"
+		unzippedFolder := "public_https"
 
         switch t {
         case "normal":
@@ -37,8 +38,9 @@ func main() {
             if err := exec.Command("mkdir", "-p", "nivel2").Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear carpeta: "+err.Error())
             }
-            if err := exec.Command("bash", "-c", "shopt -s extglob && mv -- !("+zipFile+") nivel2/").Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al mover archivos: "+err.Error())
+            // Mover la carpeta descomprimida a nivel2
+            if err := exec.Command("mv", "-f", unzippedFolder, "nivel2/").Run(); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al mover carpeta: "+err.Error())
             }
             os.Remove(zipFile)
             return c.String(http.StatusOK, "Proceso completado para type: "+t)
