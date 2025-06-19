@@ -6,6 +6,8 @@ import (
     "os/exec"
     "path/filepath"
     "github.com/labstack/echo/v4"
+	"bytes"
+    "io/ioutil"
 )
 
 // Estructura para recibir el JSON
@@ -72,6 +74,15 @@ func main() {
 			}
     
             return c.String(http.StatusOK, "Permisos otorgados a la carpeta "+unzippedFolder)
+		case "reset":
+			// Realiza una petición POST al servidor en el puerto 8081
+			resp, err := http.Post("http://localhost:8081/restart", "application/json", bytes.NewBuffer([]byte("{}")))
+			if err != nil {
+				return c.String(http.StatusInternalServerError, "Error al contactar el servidor en 8081: "+err.Error())
+			}
+			defer resp.Body.Close()
+			body, _ := ioutil.ReadAll(resp.Body)
+			return c.String(http.StatusOK, "Respuesta del servidor 8081: "+string(body))
 
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
