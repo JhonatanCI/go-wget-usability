@@ -6,6 +6,7 @@ import (
     "os/exec"
     "path/filepath"
     "github.com/labstack/echo/v4"
+	"time"
 )
 
 // Estructura para recibir el JSON
@@ -60,7 +61,7 @@ func main() {
 
             // Reiniciar servicio
             serviceName := "filedesk-cloud." + req.Service
-            if err := restartService(serviceName); err != nil {
+            if err := applyService(serviceName); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
             }
 
@@ -128,29 +129,59 @@ func main() {
             }
 
             return c.String(http.StatusOK, "Proceso 'resources' completado correctamente.")
-		case "reiniciador":
-			// Usamos el campo 'service' que ya existía
+
+		case "new_folder":
+			if req.RouteDestino == "" || req.NameDescomprimido == "" {
+				return c.String(http.StatusBadRequest, "Para 'crear_carpeta', se requieren 'route_destino' y 'name_descomprimido'")
+			}
+			fullPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
+			if err := os.MkdirAll(fullPath, 0755); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al crear la carpeta: "+err.Error())
+			}
+			if err := setPermissions(fullPath, "777"); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al dar permisos a la carpeta: "+err.Error())
+			}
+			return c.String(http.StatusOK, "Carpeta creada y con permisos en: "+fullPath)
+
+		case "replace_folder":
+			if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
+				return c.String(http.StatusBadRequest, "Para 'reemplazar_carpeta' se requieren 'route_origen', 'download' y 'name_descomprimido'")
+			}
+			if _, err := os.Stat(req.RouteOrigen); err == nil {
+				oldFolderPath := req.RouteOrigen + "_old_" + time.Now().Format("20060102150405")
+				if err := exec.Command("sudo", "mv", req.RouteOrigen, oldFolderPath).Run(); err != nil {
+					return c.String(http.StatusInternalServerError, "Error al renombrar carpeta original: "+err.Error())
+				}
+			}
+			zipFile := req.NameDescomprimido + ".zip"
+			if err := os.MkdirAll(updateDir, 0755); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
+			}
+			if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
+			}
+			srcPath := filepath.Join(updateDir, req.NameDescomprimido)
+			destPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
+			if err := exec.Command("sudo", "mv", srcPath, req.RouteDestino).Run(); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al mover la nueva carpeta a su destino: "+err.Error())
+			}
+			if err := setPermissions(destPath, "777"); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al dar permisos a la nueva carpeta: "+err.Error())
+			}
+			os.Remove(filepath.Join(updateDir, zipFile))
+			return c.String(http.StatusOK, "Carpeta reemplazada correctamente en: "+destPath)
+
+		case "reset":
 			if req.Service == "" {
 				return c.String(http.StatusBadRequest, "El campo 'service' es requerido para reiniciar un servicio.")
 			}
 			
-			// MEJORA DE SEGURIDAD: Lista blanca de servicios permitidos
-			serviciosPermitidos := map[string]bool{
-				"filedesk-cloud.service": true,
-				"nginx.service":          true,
-				// Añade aquí otros servicios que quieras permitir
-			}
-
-			if !serviciosPermitidos[req.Service] {
-				return c.String(http.StatusForbidden, "Error: El reinicio del servicio '"+req.Service+"' no está permitido.")
-			}
-
-			// Usamos la función existente para reiniciar
-			if err := restartService(req.Service); err != nil {
+			if err := applyService(req.Service); err != nil {
 				return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
 			}
-			
 			return c.String(http.StatusOK, "Servicio '"+req.Service+"' reiniciado correctamente.")
+
+		
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
         }
@@ -203,7 +234,7 @@ func setPermissions(path, perms string) error {
     return exec.Command("sudo", "chmod", "-R", perms, path).Run()
 }
 
-func restartService(service string) error {
+func applyService(service string) error {
     return exec.Command("sudo", "systemctl", "restart", service).Run()
 }
 
