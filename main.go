@@ -27,10 +27,12 @@ func main() {
         if err := c.Bind(&req); err != nil {
             return c.String(http.StatusBadRequest, "JSON inválido: "+err.Error())
         }
-
-        switch req.Type {
+		
+		updateDir := "update"
+        
+		switch req.Type {
         case "backend":
-            updateDir := "update"
+            
             zipFile := req.NameDescomprimido
             unzippedFolder := req.NameDescomprimido
 
@@ -67,6 +69,38 @@ func main() {
             }
 
             return c.String(http.StatusOK, "Proceso backend completado correctamente.")
+		
+		case "public":
+            zipFile := req.NameDescomprimido + ".zip"
+            unzippedFolder := req.NameDescomprimido
+
+            if err := os.MkdirAll(updateDir, 0755); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
+            }
+
+            // Descargar y descomprimir el zip en update
+            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
+            }
+
+            // Copiar el contenido descomprimido a la ruta destino
+            srcPath := filepath.Join(updateDir, unzippedFolder) + "/*"
+            destPath := req.RouteDestino
+            if err := os.MkdirAll(destPath, 0755); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear ruta destino: "+err.Error())
+            }
+            // sudo cp -R update/public_https/* /usr/bin/fd_cloud/public/
+            if err := exec.Command("bash", "-c", "sudo cp -R "+srcPath+" "+destPath).Run(); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al copiar archivos: "+err.Error())
+            }
+
+            // Dar permisos a la carpeta destino
+            if err := setPermissions(destPath, "777"); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al dar permisos: "+err.Error())
+            }
+
+            return c.String(http.StatusOK, "Proceso public completado correctamente.")
+
 
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
