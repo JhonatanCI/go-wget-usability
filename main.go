@@ -53,7 +53,7 @@ func main() {
             if err := exec.Command("mv", "-f", unzippedFolder, "nivel2/").Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al mover carpeta: "+err.Error())
             }
-            os.Remove(zipFile)
+           
             return c.String(http.StatusOK, "Proceso completado para type: "+t)
 		case "permissions":
 			targetFolder := unzippedFolder
@@ -67,10 +67,10 @@ func main() {
                 return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
             }
             // Otorgar todos los permisos a la carpeta descomprimida
-            if err := exec.Command("chmod", "-R", "777", unzippedFolder).Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al cambiar permisos: "+err.Error())
-            }
-            os.Remove(zipFile)
+			if err := exec.Command("sudo", "chmod", "-R", "777", unzippedFolder).Run(); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al cambiar permisos: "+err.Error())
+			}
+    
             return c.String(http.StatusOK, "Permisos otorgados a la carpeta "+unzippedFolder)
 
         default:
