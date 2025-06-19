@@ -31,7 +31,7 @@ func main() {
         switch req.Type {
         case "backend":
             updateDir := "update"
-            zipFile := req.NameDescomprimido + ".zip"
+            zipFile := req.NameDescomprimido
             unzippedFolder := req.NameDescomprimido
 
             // Crear carpeta update si no existe
@@ -40,8 +40,8 @@ func main() {
             }
 
             // Descargar y descomprimir
-            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
+            if err := download(req.Download, zipFile, updateDir); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al descargar: "+err.Error())
             }
 
             // Mover/reemplazar en destino
