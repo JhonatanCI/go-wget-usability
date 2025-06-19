@@ -84,7 +84,7 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 		return err
 	}
     // Descomprimir el archivo dentro de la carpeta update
-    cmd := exec.Command("unzip", "-o", zipFile, "-d", dir)
+    cmd := exec.Command("unzip", "-o", filePath, "-d", dir)
     if err := cmd.Run(); err != nil {
         return err
     }
