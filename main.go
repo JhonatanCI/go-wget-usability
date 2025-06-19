@@ -101,6 +101,32 @@ func main() {
 
             return c.String(http.StatusOK, "Proceso public completado correctamente.")
 
+		case "resources":
+            // El nombre del archivo ejecutable que vamos a manejar.
+            executableName := req.NameDescomprimido 
+
+            // 1. Asegurarse que el directorio 'update' existe.
+            if err := os.MkdirAll(updateDir, 0755); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
+            }
+
+            // 2. Descargar el archivo ejecutable en la carpeta 'update'.
+            if err := download(req.Download, executableName, updateDir); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al descargar el ejecutable: "+err.Error())
+            }
+
+            // 3. Mover y reemplazar el ejecutable en su destino final.
+            if err := moveAndReplace(executableName, req.RouteDestino, updateDir); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al mover el ejecutable: "+err.Error())
+            }
+
+            // 4. Dar permisos al archivo ejecutable en su nueva ubicación.
+            destPath := filepath.Join(req.RouteDestino, executableName)
+            if err := setPermissions(destPath, "777"); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al dar permisos al ejecutable: "+err.Error())
+            }
+
+            return c.String(http.StatusOK, "Proceso 'resources' completado correctamente.")
 
         default:
             return c.String(http.StatusBadRequest, "Tipo no soportado")
