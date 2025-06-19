@@ -40,7 +40,7 @@ func main() {
             }
 
             // Descargar y descomprimir
-            if err := download(req.Download, zipFile, updateDir); err != nil {
+            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
             }
 
