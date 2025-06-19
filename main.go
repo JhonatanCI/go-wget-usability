@@ -78,9 +78,11 @@ func main() {
 
 func downloadAndUnzip(url, zipFile, dir string) error {
     // Descargar el archivo zip en la carpeta update
-    if err := exec.Command("wget", "-O", zipFile, url).Run(); err != nil {
-        return err
-    }
+    updateDir := dir
+	filePath := filepath.Join(updateDir, zipFile)
+	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
+		return err
+	}
     // Descomprimir el archivo dentro de la carpeta update
     cmd := exec.Command("unzip", "-o", zipFile, "-d", dir)
     if err := cmd.Run(); err != nil {
