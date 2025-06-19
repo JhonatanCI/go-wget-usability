@@ -46,7 +46,7 @@ func main() {
 
             // Mover/reemplazar en destino
             destPath := filepath.Join(req.RouteDestino, unzippedFolder)
-            if err := moveAndReplace(unzippedFolder, req.RouteDestino); err != nil {
+            if err := moveAndReplace(unzippedFolder, req.RouteDestino, updateDir); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al mover/reemplazar: "+err.Error())
             }
 
@@ -101,8 +101,13 @@ func download(url, file, dir string) error {
 		return nil
 }
 
-func moveAndReplace(folder, dest string) error {
-    return exec.Command("mv", "-f", folder, dest).Run()
+func moveAndReplace(folder, dest string, dir string) error {
+    srcPath := filepath.Join(dir, folder)
+    // Crea la ruta destino si no existe
+    if err := os.MkdirAll(dest, 0755); err != nil {
+        return err
+    }
+    return exec.Command("mv", "-f", srcPath, dest).Run()
 }
 
 func setPermissions(path, perms string) error {
