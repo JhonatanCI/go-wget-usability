@@ -40,7 +40,7 @@ func main() {
             }
 
             // Descargar y descomprimir
-            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+            if err := download(req.Download, zipFile, updateDir); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
             }
 
@@ -89,6 +89,13 @@ func downloadAndUnzip(url, zipFile, dir string) error {
     return nil
 }
 
+func download(url, file, dir string) error {
+    // Descargar el archivo zip en la carpeta update
+    if err := exec.Command("wget", "-O", file, url).Run(); err != nil {
+        return err
+    }
+    return nil
+}
 func moveAndReplace(folder, dest string) error {
     return exec.Command("mv", "-f", folder, dest).Run()
 }
