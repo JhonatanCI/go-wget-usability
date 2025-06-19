@@ -44,8 +44,11 @@ func main() {
                 return c.String(http.StatusOK, "La carpeta ya fue movida a nivel2.")
             }
             if err := exec.Command("mkdir", "-p", "nivel2").Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear carpeta: "+err.Error())
-            }
+  				return c.String(http.StatusInternalServerError, "Error al crear carpeta: "+err.Error())
+			}
+			if err := exec.Command("chmod", "555", "nivel2").Run(); err != nil {
+				return c.String(http.StatusInternalServerError, "Error al cambiar permisos de la carpeta: "+err.Error())
+			}
             // Mover la carpeta descomprimida a nivel2
             if err := exec.Command("mv", "-f", unzippedFolder, "nivel2/").Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al mover carpeta: "+err.Error())
