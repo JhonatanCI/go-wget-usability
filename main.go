@@ -34,9 +34,6 @@ func main() {
             return c.String(http.StatusOK, "Proceso completado para type: "+t)
 
         case "move":
-            if err := downloadAndUnzip(url, zipFile); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
-            }
             if err := exec.Command("mkdir", "-p", "nivel2").Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear carpeta: "+err.Error())
             }
