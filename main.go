@@ -74,7 +74,7 @@ func main() {
 		
 		case "public":
             zipFile := req.NameDescomprimido + ".zip"
-            unzippedFolder := req.NameDescomprimido 
+            //unzippedFolder := req.NameDescomprimido 
 
             if err := os.MkdirAll(updateDir, 0755); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
@@ -86,7 +86,7 @@ func main() {
             }
 
             // Copiar el contenido descomprimido a la ruta destino
-            srcPath := filepath.Join(updateDir, unzippedFolder) + "/*"
+            srcPath := filepath.Join(updateDir, "*")
             destPath := req.RouteDestino
             if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear ruta destino con sudo: "+err.Error())
