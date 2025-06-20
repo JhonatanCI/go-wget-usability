@@ -138,7 +138,7 @@ func main() {
 				return c.String(http.StatusBadRequest, "Para 'crear_carpeta', se requieren 'route_destino' y 'name_descomprimido'")
 			}
 			fullPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
-			if err := os.MkdirAll(fullPath, 0755); err != nil {
+			if err := sudoMkdirAll(fullPath); err != nil {
 				return c.String(http.StatusInternalServerError, "Error al crear la carpeta: "+err.Error())
 			}
 			if err := setPermissions(fullPath, "777"); err != nil {
@@ -249,4 +249,13 @@ func createFile(path string) error {
         return err
     }
     return f.Close()
+}
+
+
+func sudoMkdirAll(path string) error {
+    cmd := exec.Command("sudo", "mkdir", "-p", path)
+    if out, err := cmd.CombinedOutput(); err != nil {
+        return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+    }
+    return nil
 }
