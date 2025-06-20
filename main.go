@@ -147,32 +147,45 @@ func main() {
 			return c.String(http.StatusOK, "Carpeta creada y con permisos en: "+fullPath)
 
 		case "replace_folder":
-			if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
-				return c.String(http.StatusBadRequest, "Para 'reemplazar_carpeta' se requieren 'route_origen', 'download' y 'name_descomprimido'")
-			}
-			if _, err := os.Stat(req.RouteOrigen); err == nil {
-				oldFolderPath := req.RouteOrigen + "_old_" + time.Now().Format("20060102150405")
-				if err := exec.Command("sudo", "mv", req.RouteOrigen, oldFolderPath).Run(); err != nil {
-					return c.String(http.StatusInternalServerError, "Error al renombrar carpeta original: "+err.Error())
-				}
-			}
-			zipFile := req.NameDescomprimido + ".zip"
-			if err := os.MkdirAll(updateDir, 0755); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
-			}
-			if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
-			}
-			srcPath := filepath.Join(updateDir, req.NameDescomprimido)
-			destPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
-			if err := exec.Command("sudo", "mv", srcPath, req.RouteDestino).Run(); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al mover la nueva carpeta a su destino: "+err.Error())
-			}
-			if err := setPermissions(destPath, "777"); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al dar permisos a la nueva carpeta: "+err.Error())
-			}
-			os.Remove(filepath.Join(updateDir, zipFile))
-			return c.String(http.StatusOK, "Carpeta reemplazada correctamente en: "+destPath)
+            if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
+                return c.String(http.StatusBadRequest, "Para 'replace_folder' se requieren 'route_origen', 'download' y 'name_descomprimido'")
+            }
+
+            // 1. Respaldar carpeta original si existe
+            if _, err := os.Stat(req.RouteOrigen); err == nil {
+                oldFolderPath := req.RouteOrigen + "_old_" + time.Now().Format("20060102150405")
+                if err := exec.Command("sudo", "mv", req.RouteOrigen, oldFolderPath).Run(); err != nil {
+                    return c.String(http.StatusInternalServerError, "Error al renombrar carpeta original: "+err.Error())
+                }
+            }
+
+            // 2. Preparar carpeta temporal y descargar zip
+            zipFile := req.NameDescomprimido + ".zip"
+            if err := os.MkdirAll(updateDir, 0755); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
+            }
+            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
+            }
+
+            // 3. Crear carpeta destino con sudo
+            if err := exec.Command("sudo", "mkdir", "-p", req.RouteDestino).Run(); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear ruta destino: "+err.Error())
+            }
+
+            // 4. Copiar archivos sueltos desde 'update/' al destino
+            cpCmd := exec.Command("bash", "-c", "sudo cp -R "+filepath.Join(updateDir, "*")+" "+req.RouteDestino)
+            if out, err := cpCmd.CombinedOutput(); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al copiar archivos al destino: "+err.Error()+" - "+string(out))
+            }
+
+            // 5. Dar permisos
+            if err := setPermissions(req.RouteDestino, "777"); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al dar permisos a la nueva carpeta: "+err.Error())
+            }
+
+            return c.String(http.StatusOK, "Carpeta reemplazada correctamente en: "+req.RouteDestino)
+
 
 		case "reset":
 			if req.Service == "" {
