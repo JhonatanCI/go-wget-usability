@@ -1,12 +1,14 @@
 package main
 
 import (
-    "net/http"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "github.com/labstack/echo/v4"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
+
+	"github.com/labstack/echo/v4"
 )
 
 // Estructura para recibir el JSON
@@ -224,9 +226,12 @@ func download(url, file, dir string) error {
 func moveAndReplace(folder, dest string, dir string) error {
     srcPath := filepath.Join(dir, folder)
     // Crea la ruta destino si no existe
-    if err := os.MkdirAll(dest, 0755); err != nil {
-        return err
+    cmd := exec.Command("sudo", "mkdir", "-p", dest)
+    if out, err := cmd.CombinedOutput(); err != nil {
+        return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
     }
+
+
     return exec.Command("sudo","mv", "-f", srcPath, dest).Run()
 }
 
