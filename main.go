@@ -86,7 +86,7 @@ func main() {
             }
 
             // Copiar el contenido descomprimido a la ruta destino
-            srcPath := filepath.Join(updateDir, "*")
+            srcPath := filepath.Join(updateDir, "/*")
             destPath := req.RouteDestino
             if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al crear ruta destino con sudo: "+err.Error())
