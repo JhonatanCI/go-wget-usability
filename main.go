@@ -88,9 +88,10 @@ func main() {
             // Copiar el contenido descomprimido a la ruta destino
             srcPath := filepath.Join(updateDir, unzippedFolder) + "/*"
             destPath := req.RouteDestino
-            if err := os.MkdirAll(destPath, 0755); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear ruta destino: "+err.Error())
+            if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
+                return c.String(http.StatusInternalServerError, "Error al crear ruta destino con sudo: "+err.Error())
             }
+
             // sudo cp -R update/public_https/* /usr/bin/fd_cloud/public/
             if err := exec.Command("bash", "-c", "sudo cp -R "+srcPath+" "+destPath).Run(); err != nil {
                 return c.String(http.StatusInternalServerError, "Error al copiar archivos: "+err.Error())
@@ -201,7 +202,6 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 
 	cmd := exec.Command("unzip", "-o", zipFile)
 
-	// Aquí está la magia: establece el directorio de trabajo para este comando.
 	cmd.Dir = dir // dir es "update"
 
 	// Ejecutamos el comando 'unzip' desde la carpeta 'update'
@@ -227,7 +227,7 @@ func moveAndReplace(folder, dest string, dir string) error {
     if err := os.MkdirAll(dest, 0755); err != nil {
         return err
     }
-    return exec.Command("mv", "-f", srcPath, dest).Run()
+    return exec.Command("sudo","mv", "-f", srcPath, dest).Run()
 }
 
 func setPermissions(path, perms string) error {
