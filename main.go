@@ -308,6 +308,7 @@ func getPendingTasks() ([]DownloadRequest, error) {
 	var tareas []DownloadRequest
 	for rows.Next() {
 		var t DownloadRequest
+        fmt.Printf("📝 Cargando tarea desde BD: %+v\n", t)
 		if err := rows.Scan(&t.ID, &t.Type, &t.NameDescomprimido, &t.Download, &t.RouteDestino, &t.RouteOrigen, &t.Service, &t.ControlFile); err != nil {
 			continue
 		}
@@ -324,5 +325,6 @@ func updateTaskState(id string, estado string) error {
 	defer database.Close(conn)
 
 	_, err = database.Exec(conn, `UPDATE tareas SET estado = $1 WHERE id = $2`, estado, id)
+    fmt.Printf("🔄 Estado actualizado para tarea %s → %s\n", id, estado)
 	return err
 }
