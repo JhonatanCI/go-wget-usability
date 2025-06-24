@@ -2,208 +2,228 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
+	"time"
+    "wget/database"
+
+	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
+	_ "github.com/lib/pq"
+
 	"os/exec"
 	"path/filepath"
-	"time"
 
-	"github.com/labstack/echo/v4"
+	//"yourmodule/database" // reemplaza esto por el path correcto a tu package database
 )
 
-// Estructura para recibir el JSON
 type DownloadRequest struct {
-    ID                string `json:"id"`
-    Type              string `json:"type"`
-    NameDescomprimido string `json:"name_descomprimido"`
-    Download          string `json:"download"`
-    RouteDestino      string `json:"route_destino"`
+	ID                string `json:"id"`
+	Type              string `json:"type"`
+	NameDescomprimido string `json:"name_descomprimido"`
+	Download          string `json:"download"`
+	RouteDestino      string `json:"route_destino"`
 	RouteOrigen       string `json:"route_origen"`
-    Service           string `json:"service"`
-    ControlFile       string `json:"control_file"`
+	Service           string `json:"service"`
+	ControlFile       string `json:"control_file"`
 }
 
+
+var downloadQueue = make(chan DownloadRequest, 20)
+
 func main() {
-    e := echo.New()
+	e := echo.New()
 
-    e.POST("/download", func(c echo.Context) error {
-        var req DownloadRequest
-        if err := c.Bind(&req); err != nil {
-            return c.String(http.StatusBadRequest, "JSON inválido: "+err.Error())
-        }
-		
-		updateDir := "update"
-        
-		switch req.Type {
-        case "backend":
-            
-            zipFile := req.NameDescomprimido
-            unzippedFolder := req.NameDescomprimido
+	if err := godotenv.Load("./.env"); err != nil {
+		panic(err)
+	}
 
-            // Crear carpeta update si no existe
-            if err := os.MkdirAll(updateDir, 0755); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
-            }
+	// 🧠 Worker principal que ejecuta las tareas
+	go func() {
+		for req := range downloadQueue {
+			start := time.Now()
+			fmt.Printf("📥 Procesando tarea ID=%s tipo=%s\n", req.ID, req.Type)
 
-            // Descargar y descomprimir
-            if err := download(req.Download, zipFile, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar: "+err.Error())
-            }
-
-            // Mover/reemplazar en destino
-            destPath := filepath.Join(req.RouteDestino, unzippedFolder)
-            if err := moveAndReplace(unzippedFolder, req.RouteDestino, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al mover/reemplazar: "+err.Error())
-            }
-
-            // Dar permisos
-            if err := setPermissions(destPath, "777"); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al dar permisos: "+err.Error())
-            }
-
-            // Reiniciar servicio
-            serviceName := "filedesk-cloud." + req.Service
-            if err := applyService(serviceName); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
-            }
-
-            // Crear archivo de control en la ruta recibida por JSON
-            if err := createFile(req.ControlFile); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear archivo de control: "+err.Error())
-            }
-
-            return c.String(http.StatusOK, "Proceso backend completado correctamente.")
-		
-		case "public":
-            zipFile := req.NameDescomprimido + ".zip"
-            //unzippedFolder := req.NameDescomprimido 
-
-            if err := os.MkdirAll(updateDir, 0755); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
-            }
-
-            // Descargar y descomprimir el zip en update
-            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
-            }
-
-            // Copiar el contenido descomprimido a la ruta destino
-            srcPath := filepath.Join(updateDir, "/*")
-            destPath := req.RouteDestino
-            if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear ruta destino con sudo: "+err.Error())
-            }
-
-            // sudo cp -R update/public_https/* /usr/bin/fd_cloud/public/
-            if err := exec.Command("bash", "-c", "sudo cp -R "+srcPath+" "+destPath).Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al copiar archivos: "+err.Error())
-            }
-
-            // Dar permisos a la carpeta destino
-            if err := setPermissions(destPath, "777"); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al dar permisos: "+err.Error())
-            }
-
-            return c.String(http.StatusOK, "Proceso public completado correctamente.")
-
-		case "resources":
-            // El nombre del archivo ejecutable que vamos a manejar.
-            executableName := req.NameDescomprimido 
-
-            // 1. Asegurarse que el directorio 'update' existe.
-            if err := os.MkdirAll(updateDir, 0755); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
-            }
-
-            // 2. Descargar el archivo ejecutable en la carpeta 'update'.
-            if err := download(req.Download, executableName, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar el ejecutable: "+err.Error())
-            }
-
-            // 3. Mover y reemplazar el ejecutable en su destino final.
-            if err := moveAndReplace(executableName, req.RouteDestino, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al mover el ejecutable: "+err.Error())
-            }
-
-            // 4. Dar permisos al archivo ejecutable en su nueva ubicación.
-            destPath := filepath.Join(req.RouteDestino, executableName)
-            if err := setPermissions(destPath, "777"); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al dar permisos al ejecutable: "+err.Error())
-            }
-
-            return c.String(http.StatusOK, "Proceso 'resources' completado correctamente.")
-
-		case "new_folder":
-			if req.RouteDestino == "" || req.NameDescomprimido == "" {
-				return c.String(http.StatusBadRequest, "Para 'crear_carpeta', se requieren 'route_destino' y 'name_descomprimido'")
+			err := processDownload(req)
+			if err != nil {
+				fmt.Printf("❌ Error en tarea %s: %v\n", req.ID, err)
+				updateTaskState(req.ID, "002")
+			} else {
+				fmt.Printf("✅ Completado ID=%s en %s\n", req.ID, time.Since(start))
+				updateTaskState(req.ID, "003")
 			}
-			fullPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
-			if err := sudoMkdirAll(fullPath); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al crear la carpeta: "+err.Error())
-			}
-			if err := setPermissions(fullPath, "777"); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al dar permisos a la carpeta: "+err.Error())
-			}
-			return c.String(http.StatusOK, "Carpeta creada y con permisos en: "+fullPath)
+		}
+	}()
 
-		case "replace_folder":
-            if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
-                return c.String(http.StatusBadRequest, "Para 'replace_folder' se requieren 'route_origen', 'download' y 'name_descomprimido'")
+	// ⏰ Ticker que revisa la BD cada minuto
+	ticker := time.NewTicker(time.Minute)
+    go func() {
+        for range ticker.C {
+            tasks, err := getPendingTasks()
+            if err != nil {
+                fmt.Println("Error al obtener tareas:", err)
+                continue
             }
 
-            // 1. Respaldar carpeta original si existe
-            if _, err := os.Stat(req.RouteOrigen); err == nil {
-                oldFolderPath := req.RouteOrigen + "_old_" + time.Now().Format("20060102150405")
-                if err := exec.Command("sudo", "mv", req.RouteOrigen, oldFolderPath).Run(); err != nil {
-                    return c.String(http.StatusInternalServerError, "Error al renombrar carpeta original: "+err.Error())
+            for _, task := range tasks {
+                if err := updateTaskState(task.ID, "001"); err != nil {
+                    fmt.Println("Error al actualizar estado:", err)
+                    continue
+                }
+
+                select {
+                case downloadQueue <- task:
+                    fmt.Println("✅ Tarea encolada:", task.ID)
+                default:
+                    fmt.Println("⚠️ Cola llena. No se encoló:", task.ID)
                 }
             }
-
-            // 2. Preparar carpeta temporal y descargar zip
-            zipFile := req.NameDescomprimido + ".zip"
-            if err := os.MkdirAll(updateDir, 0755); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear carpeta update: "+err.Error())
-            }
-            if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al descargar y descomprimir: "+err.Error())
-            }
-
-            // 3. Crear carpeta destino con sudo
-            if err := exec.Command("sudo", "mkdir", "-p", req.RouteDestino).Run(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al crear ruta destino: "+err.Error())
-            }
-
-            // 4. Copiar archivos sueltos desde 'update/' al destino
-            cpCmd := exec.Command("bash", "-c", "sudo cp -R "+filepath.Join(updateDir, "*")+" "+req.RouteDestino)
-            if out, err := cpCmd.CombinedOutput(); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al copiar archivos al destino: "+err.Error()+" - "+string(out))
-            }
-
-            // 5. Dar permisos
-            if err := setPermissions(req.RouteDestino, "777"); err != nil {
-                return c.String(http.StatusInternalServerError, "Error al dar permisos a la nueva carpeta: "+err.Error())
-            }
-
-            return c.String(http.StatusOK, "Carpeta reemplazada correctamente en: "+req.RouteDestino)
-
-
-		case "reset":
-			if req.Service == "" {
-				return c.String(http.StatusBadRequest, "El campo 'service' es requerido para reiniciar un servicio.")
-			}
-			
-			if err := applyService(req.Service); err != nil {
-				return c.String(http.StatusInternalServerError, "Error al reiniciar el servicio: "+err.Error())
-			}
-			return c.String(http.StatusOK, "Servicio '"+req.Service+"' reiniciado correctamente.")
-
-		
-        default:
-            return c.String(http.StatusBadRequest, "Tipo no soportado")
         }
-    })
+    }()
 
-    e.Logger.Fatal(e.Start(":8080"))
+
+	// 🧾 Endpoint para encolar tareas manualmente
+	e.POST("/download", func(c echo.Context) error {
+		var req DownloadRequest
+		if err := c.Bind(&req); err != nil {
+			return c.String(400, "JSON inválido: "+err.Error())
+		}
+
+		select {
+		case downloadQueue <- req:
+			_ = updateTaskState(req.ID, "001")
+			return c.String(200, "Tarea encolada correctamente.")
+		default:
+			return c.String(503, "Cola llena, intenta luego.")
+		}
+	})
+
+	e.Logger.Fatal(e.Start(":8080"))
+    
+}
+
+func processDownload(req DownloadRequest) error {
+	updateDir := "update"
+
+	switch req.Type {
+	case "backend":
+		zipFile := req.NameDescomprimido
+		unzippedFolder := req.NameDescomprimido
+
+		if err := os.MkdirAll(updateDir, 0755); err != nil {
+			return fmt.Errorf("crear carpeta update: %w", err)
+		}
+
+		if err := download(req.Download, zipFile, updateDir); err != nil {
+			return fmt.Errorf("descargar: %w", err)
+		}
+
+		destPath := filepath.Join(req.RouteDestino, unzippedFolder)
+		if err := moveAndReplace(unzippedFolder, req.RouteDestino, updateDir); err != nil {
+			return fmt.Errorf("mover/reemplazar: %w", err)
+		}
+
+		if err := setPermissions(destPath, "777"); err != nil {
+			return fmt.Errorf("permisos: %w", err)
+		}
+
+		serviceName := "filedesk-cloud." + req.Service
+		if err := applyService(serviceName); err != nil {
+			return fmt.Errorf("reiniciar servicio: %w", err)
+		}
+
+		if err := createFile(req.ControlFile); err != nil {
+			return fmt.Errorf("crear archivo de control: %w", err)
+		}
+
+	case "public":
+		zipFile := req.NameDescomprimido + ".zip"
+		if err := os.MkdirAll(updateDir, 0755); err != nil {
+			return fmt.Errorf("crear carpeta update: %w", err)
+		}
+		if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+			return fmt.Errorf("descargar y descomprimir: %w", err)
+		}
+		srcPath := filepath.Join(updateDir, "/*")
+		destPath := req.RouteDestino
+		if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
+			return fmt.Errorf("crear ruta destino: %w", err)
+		}
+		if err := exec.Command("bash", "-c", "sudo cp -R "+srcPath+" "+destPath).Run(); err != nil {
+			return fmt.Errorf("copiar archivos: %w", err)
+		}
+		if err := setPermissions(destPath, "777"); err != nil {
+			return fmt.Errorf("permisos: %w", err)
+		}
+
+	case "resources":
+		executableName := req.NameDescomprimido
+		if err := os.MkdirAll(updateDir, 0755); err != nil {
+			return fmt.Errorf("crear carpeta update: %w", err)
+		}
+		if err := download(req.Download, executableName, updateDir); err != nil {
+			return fmt.Errorf("descargar ejecutable: %w", err)
+		}
+		if err := moveAndReplace(executableName, req.RouteDestino, updateDir); err != nil {
+			return fmt.Errorf("mover ejecutable: %w", err)
+		}
+		destPath := filepath.Join(req.RouteDestino, executableName)
+		if err := setPermissions(destPath, "777"); err != nil {
+			return fmt.Errorf("permisos: %w", err)
+		}
+
+	case "new_folder":
+		if req.RouteDestino == "" || req.NameDescomprimido == "" {
+			return fmt.Errorf("faltan datos para new_folder")
+		}
+		fullPath := filepath.Join(req.RouteDestino, req.NameDescomprimido)
+		if err := sudoMkdirAll(fullPath); err != nil {
+			return fmt.Errorf("crear carpeta: %w", err)
+		}
+		if err := setPermissions(fullPath, "777"); err != nil {
+			return fmt.Errorf("permisos: %w", err)
+		}
+
+	case "replace_folder":
+		if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
+			return fmt.Errorf("faltan datos para replace_folder")
+		}
+		if _, err := os.Stat(req.RouteOrigen); err == nil {
+			oldFolderPath := req.RouteOrigen + "_old_" + time.Now().Format("20060102150405")
+			if err := exec.Command("sudo", "mv", req.RouteOrigen, oldFolderPath).Run(); err != nil {
+				return fmt.Errorf("renombrar carpeta original: %w", err)
+			}
+		}
+		zipFile := req.NameDescomprimido + ".zip"
+		if err := os.MkdirAll(updateDir, 0755); err != nil {
+			return fmt.Errorf("crear carpeta update: %w", err)
+		}
+		if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
+			return fmt.Errorf("descargar y descomprimir: %w", err)
+		}
+		if err := exec.Command("sudo", "mkdir", "-p", req.RouteDestino).Run(); err != nil {
+			return fmt.Errorf("crear ruta destino: %w", err)
+		}
+		cpCmd := exec.Command("bash", "-c", "sudo cp -R "+filepath.Join(updateDir, "*")+" "+req.RouteDestino)
+		if out, err := cpCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("copiar archivos al destino: %w - %s", err, string(out))
+		}
+		if err := setPermissions(req.RouteDestino, "777"); err != nil {
+			return fmt.Errorf("permisos: %w", err)
+		}
+
+	case "reset":
+		if req.Service == "" {
+			return fmt.Errorf("faltan datos para reset")
+		}
+		if err := applyService(req.Service); err != nil {
+			return fmt.Errorf("reiniciar servicio: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("tipo no soportado: %s", req.Type)
+	}
+
+	return nil
 }
 
 
@@ -227,48 +247,82 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 	return nil
 }
 func download(url, file, dir string) error {
-    // Descargar el archivo zip en la carpeta update
-    updateDir := dir
+	// Descargar el archivo zip en la carpeta update
+	updateDir := dir
 	filePath := filepath.Join(updateDir, file)
 	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
 		return err
 	}
-		return nil
+	return nil
 }
 
 func moveAndReplace(folder, dest string, dir string) error {
-    srcPath := filepath.Join(dir, folder)
-    // Crea la ruta destino si no existe
-    cmd := exec.Command("sudo", "mkdir", "-p", dest)
-    if out, err := cmd.CombinedOutput(); err != nil {
-        return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
-    }
+	srcPath := filepath.Join(dir, folder)
+	// Crea la ruta destino si no existe
+	cmd := exec.Command("sudo", "mkdir", "-p", dest)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+	}
 
-
-    return exec.Command("sudo","mv", "-f", srcPath, dest).Run()
+	return exec.Command("sudo", "mv", "-f", srcPath, dest).Run()
 }
 
 func setPermissions(path, perms string) error {
-    return exec.Command("sudo", "chmod", "-R", perms, path).Run()
+	return exec.Command("sudo", "chmod", "-R", perms, path).Run()
 }
 
 func applyService(service string) error {
-    return exec.Command("sudo", "systemctl", "restart", service).Run()
+	return exec.Command("sudo", "systemctl", "restart", service).Run()
 }
 
 func createFile(path string) error {
-    f, err := os.Create(path)
-    if err != nil {
-        return err
-    }
-    return f.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
-
 func sudoMkdirAll(path string) error {
-    cmd := exec.Command("sudo", "mkdir", "-p", path)
-    if out, err := cmd.CombinedOutput(); err != nil {
-        return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
-    }
-    return nil
+	cmd := exec.Command("sudo", "mkdir", "-p", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+	}
+	return nil
+}
+
+func getPendingTasks() ([]DownloadRequest, error) {
+	conn, err := database.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer database.Close(conn)
+
+	query := `SELECT id, type, name_descomprimido, download, route_destino, route_origen, service, control_file FROM tareas WHERE estado = '000' LIMIT 10`
+	rows, err := database.Query(conn, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tareas []DownloadRequest
+	for rows.Next() {
+		var t DownloadRequest
+		if err := rows.Scan(&t.ID, &t.Type, &t.NameDescomprimido, &t.Download, &t.RouteDestino, &t.RouteOrigen, &t.Service, &t.ControlFile); err != nil {
+			continue
+		}
+		tareas = append(tareas, t)
+	}
+	return tareas, nil
+}
+
+func updateTaskState(id string, estado string) error {
+	conn, err := database.Connect()
+	if err != nil {
+		return err
+	}
+	defer database.Close(conn)
+
+	_, err = database.Exec(conn, `UPDATE tareas SET estado = $1 WHERE id = $2`, estado, id)
+	return err
 }
