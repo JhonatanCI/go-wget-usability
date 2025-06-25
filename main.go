@@ -12,6 +12,8 @@ import (
 
 	"os/exec"
 	"path/filepath"
+	"math/rand"
+	"strconv"
 
 	//"yourmodule/database" // reemplaza esto por el path correcto a tu package database
 )
@@ -29,6 +31,17 @@ type DownloadRequest struct {
 
 
 var downloadQueue = make(chan DownloadRequest, 20)
+var isRunning bool
+
+/*
+if !isRunning {
+					isRunning = true
+					go func() {
+						defer func() { isRunning = false }()      // Al terminar, liberamos el flag
+						doc_manager.TosendcorrespondenciaVERIFY() // Llama a la función del otro modelo
+					}()
+				}
+*/
 
 func main() {
 	e := echo.New()
@@ -87,6 +100,9 @@ func main() {
 		if err := c.Bind(&req); err != nil {
 			return c.String(400, "JSON inválido: "+err.Error())
 		}
+		if err := insertTaskToDB(req); err != nil {
+			return c.String(500, "Error al guardar en BD: "+err.Error())
+		}
 
 		select {
 		case downloadQueue <- req:
@@ -96,13 +112,43 @@ func main() {
 			return c.String(503, "Cola llena, intenta luego.")
 		}
 	})
+	e.PUT("/update", func(c echo.Context) error {
+		var req DownloadRequest
+		if err := c.Bind(&req); err != nil {
+			return c.String(400, "JSON inválido: "+err.Error())
+		}
+
+		if err := updateTaskByID(req, "000"); err != nil {
+			return c.String(500, "Error actualizando tarea: "+err.Error())
+		}
+
+		return c.String(200, "Tarea actualizada correctamente.")
+	})
+
 
 	e.Logger.Fatal(e.Start(":8080"))
     
 }
 
+func updateTaskByID(task DownloadRequest, estado string) error {
+	conn, err := database.Connect()
+	if err != nil {
+		return err
+	}
+	defer database.Close(conn)
+
+	_, err = database.Exec(conn,
+		`UPDATE tareas SET estado = $1, name_descomprimido = $2, download = $3, route_destino = $4, route_origen = $5, service = $6, control_file = $7 WHERE id = $8`,
+		estado, task.NameDescomprimido, task.Download, task.RouteDestino, task.RouteOrigen, task.Service, task.ControlFile, task.ID)
+	return err
+}
+
 func processDownload(req DownloadRequest) error {
-	updateDir := "update"
+	updateDir, _, err := createUniqueTempDir()
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(updateDir)
 
 	switch req.Type {
 	case "backend":
@@ -328,3 +374,58 @@ func updateTaskState(id string, estado string) error {
     fmt.Printf("🔄 Estado actualizado para tarea %s → %s\n", id, estado)
 	return err
 }
+
+func insertTaskToDB(task DownloadRequest) error {
+	conn, err := database.Connect()
+	if err != nil {
+		return err
+	}
+	defer database.Close(conn)
+
+	_, err = database.Exec(conn, `
+		INSERT INTO tareas (id, type, name_descomprimido, download, route_destino, route_origen, service, control_file, estado)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '000')`,
+		task.ID, task.Type, task.NameDescomprimido, task.Download,
+		task.RouteDestino, task.RouteOrigen, task.Service, task.ControlFile)
+	return err
+}
+
+func createUniqueTempDir() (string, string, error) {
+	base := "update"
+
+	if err := os.MkdirAll(base, 0777); err != nil {
+		return "", "", fmt.Errorf("crear carpeta base 'update': %w", err)
+	}
+
+	randPart := strconv.Itoa(rand.Intn(1000000))
+	timestamp := time.Now().Format("20060102150405")
+	subFolder := randPart + "_" + timestamp
+	fullPath := filepath.Join(base, subFolder)
+
+	if err := os.MkdirAll(fullPath, 0777); err != nil {
+		return "", "", fmt.Errorf("crear subcarpeta temporal: %w", err)
+	}
+
+	return fullPath, subFolder, nil // ← devuelves la ruta completa y el nombre
+}
+
+
+
+/*
+update task with id *****
+update db with endppotin********
+create this <<<<<<<<<<
+
+
+var process = strconv.Itoa(rand.Int()) + time.Now().Format("20060102170604")
+
+
+			carpetatemporal := "./update/" + process
+			if _, err := os.Stat(carpetatemporal); os.IsNotExist(err) {
+				os.MkdirAll(carpetatemporal, 0777)
+			}
+
+			//se hace el  proceso
+
+
+			os.RemoveAll(carpetatemporal)*/
