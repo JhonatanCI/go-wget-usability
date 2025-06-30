@@ -276,7 +276,7 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
 		return err // Si wget falla, retornamos el error
 	}
-
+	fmt.Println("Archivos descargados en:", updateDir)
 	cmd := exec.Command("unzip", "-o", zipFile)
 
 	cmd.Dir = dir // dir es "update"
@@ -298,10 +298,11 @@ func download(url, file, dir string) error {
 	return nil
 }
 
-func moveAndReplace(folder, dest string, dir string) error {
+func moveAndReplace(folder, dest, dir string) error {
 	srcPath := filepath.Join(dir, folder)
+	destPath := filepath.Join(dest, folder)
 
-	// Solo crea el destino si NO existe
+	// Crea el destino si no existe
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
 		cmd := exec.Command("sudo", "mkdir", "-p", dest)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -309,9 +310,10 @@ func moveAndReplace(folder, dest string, dir string) error {
 		}
 	}
 
-	// Realiza el movimiento forzado
-	return exec.Command("sudo", "mv", "-f", srcPath, dest).Run()
+	// Mueve la carpeta con su nombre original al destino
+	return exec.Command("sudo", "mv", "-f", srcPath, destPath).Run()
 }
+
 
 
 func setPermissions(path, perms string) error {
