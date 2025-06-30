@@ -167,7 +167,7 @@ func processDownload(req DownloadRequest) error {
 		if err := moveAndReplace(unzippedFolder, req.RouteDestino, updateDir); err != nil {
 			return fmt.Errorf("mover/reemplazar: %w", err)
 		}
-
+		fmt.Printf("🔐 Aplicando permisos a: %s\n", destPath)
 		if err := setPermissions(destPath, "777"); err != nil {
 			return fmt.Errorf("permisos: %w", err)
 		}
@@ -298,11 +298,10 @@ func download(url, file, dir string) error {
 	return nil
 }
 
-func moveAndReplace(folder, dest, dir string) error {
+func moveAndReplace(folder, dest string, dir string) error {
 	srcPath := filepath.Join(dir, folder)
-	destPath := filepath.Join(dest, folder)
 
-	// Crea el destino si no existe
+	// Solo crea el destino si NO existe
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
 		cmd := exec.Command("sudo", "mkdir", "-p", dest)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -310,10 +309,9 @@ func moveAndReplace(folder, dest, dir string) error {
 		}
 	}
 
-	// Mueve la carpeta con su nombre original al destino
-	return exec.Command("sudo", "mv", "-f", srcPath, destPath).Run()
+	// Realiza el movimiento forzado
+	return exec.Command("sudo", "mv", "-f", srcPath, dest).Run()
 }
-
 
 
 func setPermissions(path, perms string) error {
@@ -328,6 +326,7 @@ func setPermissions(path, perms string) error {
     }
     return nil
 }
+
 
 func applyService(service string) error {
 	return exec.Command("sudo", "systemctl", "restart", service).Run()
