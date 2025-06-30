@@ -191,9 +191,7 @@ func processDownload(req DownloadRequest) error {
 		}
 		srcPath := filepath.Join(updateDir, "/*")
 		destPath := req.RouteDestino
-		if err := exec.Command("sudo", "mkdir", "-p", destPath).Run(); err != nil {
-			return fmt.Errorf("crear ruta destino: %w", err)
-		}
+		sudoMkdirAll(destPath);
 		if err := exec.Command("bash", "-c", "sudo cp -R "+srcPath+" "+destPath).Run(); err != nil {
 			return fmt.Errorf("copiar archivos: %w", err)
 		}
@@ -246,9 +244,7 @@ func processDownload(req DownloadRequest) error {
 		if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
 			return fmt.Errorf("descargar y descomprimir: %w", err)
 		}
-		if err := exec.Command("sudo", "mkdir", "-p", req.RouteDestino).Run(); err != nil {
-			return fmt.Errorf("crear ruta destino: %w", err)
-		}
+		sudoMkdirAll(req.RouteDestino);
 		cpCmd := exec.Command("bash", "-c", "sudo cp -R "+filepath.Join(updateDir, "*")+" "+req.RouteDestino)
 		if out, err := cpCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("copiar archivos al destino: %w - %s", err, string(out))
@@ -304,14 +300,19 @@ func download(url, file, dir string) error {
 
 func moveAndReplace(folder, dest string, dir string) error {
 	srcPath := filepath.Join(dir, folder)
-	// Crea la ruta destino si no existe
-	cmd := exec.Command("sudo", "mkdir", "-p", dest)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+
+	// Solo crea el destino si NO existe
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		cmd := exec.Command("sudo", "mkdir", "-p", dest)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+		}
 	}
 
+	// Realiza el movimiento forzado
 	return exec.Command("sudo", "mv", "-f", srcPath, dest).Run()
 }
+
 
 func setPermissions(path, perms string) error {
 	return exec.Command("sudo", "chmod", "-R", perms, path).Run()
@@ -330,12 +331,15 @@ func createFile(path string) error {
 }
 
 func sudoMkdirAll(path string) error {
-	cmd := exec.Command("sudo", "mkdir", "-p", path)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		cmd := exec.Command("sudo", "mkdir", "-p", path)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+		}
 	}
 	return nil
 }
+
 
 func getPendingTasks() ([]DownloadRequest, error) {
 	conn, err := database.Connect()
