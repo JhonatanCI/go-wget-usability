@@ -315,7 +315,16 @@ func moveAndReplace(folder, dest string, dir string) error {
 
 
 func setPermissions(path, perms string) error {
-	return exec.Command("sudo", "chmod", "-R", perms, path).Run()
+    if _, err := os.Stat(path); err != nil {
+        return fmt.Errorf("la ruta %s no existe: %v", path, err)
+    }
+    fmt.Printf("Cambiando permisos: sudo chmod -R %s %s\n", perms, path)
+    cmd := exec.Command("sudo", "chmod", "-R", perms, path)
+    out, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("error al cambiar permisos en %s: %v - %s", path, err, string(out))
+    }
+    return nil
 }
 
 func applyService(service string) error {
