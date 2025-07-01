@@ -163,7 +163,7 @@ func processDownload(req DownloadRequest) error {
 	defer os.RemoveAll(updateDir)
 
 	parentDir := filepath.Dir(req.RouteDestino) // Ej: /usr/bin/fd_cloud
-	updateDir = filepath.Join(parentDir, "update")
+	updateDir = filepath.Join(filepath.Dir(parentDir), "update")
 
 	
 	switch req.Type {
