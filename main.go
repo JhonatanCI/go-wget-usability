@@ -169,7 +169,7 @@ func processDownload(req DownloadRequest) error {
 		if err := setPermissions(destPath, "777"); err != nil {
 			return fmt.Errorf("permisos: %w", err)
 		}
-		serviceName := "filedesk-cloud." + req.Service
+		serviceName := req.Service
 		if err := applyService(serviceName); err != nil {
 			return fmt.Errorf("reiniciar servicio: %w", err)
 		}
@@ -324,7 +324,7 @@ func setPermissions(path, perms string) error {
 
 
 func applyService(service string) error {
-    cmd := exec.Command("sudo", "systemctl", "restart", service)
+    cmd := exec.Command("sudo", "systemctl", "restart", service, ".service")
     out, err := cmd.CombinedOutput()
     if err != nil {
         return fmt.Errorf("error al reiniciar servicio %s: %v - %s", service, err, string(out))
