@@ -153,6 +153,9 @@ func processDownload(req DownloadRequest) error {
 	switch req.Type {
 	case "backend":
 		fileName := req.NameDescomprimido // "back"
+		parentDir := filepath.Dir(req.RouteDestino) // Ej: /usr/bin/fd_cloud
+		updateDir := filepath.Join(parentDir, "update")
+
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
 			return fmt.Errorf("crear carpeta update: %w", err)
 		}
