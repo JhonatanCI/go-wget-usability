@@ -150,12 +150,12 @@ func processDownload(req DownloadRequest) error {
 	}
 	defer os.RemoveAll(updateDir)
 
+	parentDir := filepath.Dir(req.RouteDestino) // Ej: /usr/bin/fd_cloud
+	updateDir = filepath.Join(parentDir, "update")
 	switch req.Type {
 	case "backend":
 		fileName := req.NameDescomprimido // "back"
-		parentDir := filepath.Dir(req.RouteDestino) // Ej: /usr/bin/fd_cloud
-		updateDir := filepath.Join(parentDir, "update")
-
+		
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
 			return fmt.Errorf("crear carpeta update: %w", err)
 		}
@@ -258,7 +258,14 @@ func processDownload(req DownloadRequest) error {
 		if err := applyService(req.Service); err != nil {
 			return fmt.Errorf("reiniciar servicio: %w", err)
 		}
-
+	case "create_file":
+        if req.ControlFile == "" {
+            return fmt.Errorf("faltan datos para create_file: control_file vacío")
+        }
+        if err := createFile(req.ControlFile); err != nil {
+            return fmt.Errorf("crear archivo de control: %w", err)
+        }
+        fmt.Printf("📝 Archivo de control creado en: %s\n", req.ControlFile)
 	default:
 		return fmt.Errorf("tipo no soportado: %s", req.Type)
 	}
