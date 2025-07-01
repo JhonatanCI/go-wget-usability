@@ -31,8 +31,20 @@ type DownloadRequest struct {
 
 
 var downloadQueue = make(chan DownloadRequest, 20)
-var isRunning bool
+var allowedServices = map[string]bool{
+    "filedesk-web-server": true,
+    "filedesk-inside":     true,
+    "filedesk-doc-server": true,
+    "filedesk-cloud":      true,
+    "filedesk-python":     true,
+    "postgresql":          true,
+    "nginx":               true,
+}
 
+var allowedBasePaths = []string{
+    "/usr/bin/fd_cloud",
+    // Puedes agregar más rutas aquí en el futuro
+}
 /*
 if !isRunning {
 					isRunning = true
@@ -152,8 +164,16 @@ func processDownload(req DownloadRequest) error {
 
 	parentDir := filepath.Dir(req.RouteDestino) // Ej: /usr/bin/fd_cloud
 	updateDir = filepath.Join(parentDir, "update")
+
+	
 	switch req.Type {
 	case "backend":
+		if !isPathAllowed(req.RouteDestino) {
+   			return fmt.Errorf("ruta destino no permitida: %s", req.RouteDestino)
+		}
+		if req.ControlFile != "" && !isPathAllowed(req.ControlFile) {
+			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
+		}
 		fileName := req.NameDescomprimido // "back"
 		
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
@@ -180,6 +200,12 @@ func processDownload(req DownloadRequest) error {
 			return fmt.Errorf("crear archivo de control: %w", err)
 		}
 	case "public":
+		if !isPathAllowed(req.RouteDestino) {
+   			return fmt.Errorf("ruta destino no permitida: %s", req.RouteDestino)
+		}
+		if req.ControlFile != "" && !isPathAllowed(req.ControlFile) {
+			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
+		}
 		zipFile := req.NameDescomprimido + ".zip"
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
 			return fmt.Errorf("crear carpeta update: %w", err)
@@ -198,6 +224,12 @@ func processDownload(req DownloadRequest) error {
 		}
 
 	case "resources":
+		if !isPathAllowed(req.RouteDestino) {
+   			return fmt.Errorf("ruta destino no permitida: %s", req.RouteDestino)
+		}
+		if req.ControlFile != "" && !isPathAllowed(req.ControlFile) {
+			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
+		}
 		executableName := req.NameDescomprimido
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
 			return fmt.Errorf("crear carpeta update: %w", err)
@@ -214,6 +246,12 @@ func processDownload(req DownloadRequest) error {
 		}
 
 	case "new_folder":
+		if !isPathAllowed(req.RouteDestino) {
+   			return fmt.Errorf("ruta destino no permitida: %s", req.RouteDestino)
+		}
+		if req.ControlFile != "" && !isPathAllowed(req.ControlFile) {
+			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
+		}
 		if req.RouteDestino == "" || req.NameDescomprimido == "" {
 			return fmt.Errorf("faltan datos para new_folder")
 		}
@@ -226,6 +264,12 @@ func processDownload(req DownloadRequest) error {
 		}
 
 	case "replace_folder":
+		if !isPathAllowed(req.RouteDestino) {
+   			return fmt.Errorf("ruta destino no permitida: %s", req.RouteDestino)
+		}
+		if req.ControlFile != "" && !isPathAllowed(req.ControlFile) {
+			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
+		}
 		if req.RouteOrigen == "" || req.Download == "" || req.NameDescomprimido == "" {
 			return fmt.Errorf("faltan datos para replace_folder")
 		}
@@ -293,6 +337,24 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 
 	return nil
 }
+
+func isPathAllowed(path string) bool {
+    absPath, err := filepath.Abs(path)
+    if err != nil {
+        return false
+    }
+    for _, base := range allowedBasePaths {
+        absBase, err := filepath.Abs(base)
+        if err != nil {
+            continue
+        }
+        if len(absPath) >= len(absBase) && absPath[:len(absBase)] == absBase {
+            return true
+        }
+    }
+    return false
+}
+
 func download(url, file, dir string) error {
     filePath := filepath.Join(dir, file)
     fmt.Printf("Descargando %s en %s\n", url, filePath)
@@ -335,7 +397,10 @@ func setPermissions(path, perms string) error {
 
 
 func applyService(service string) error {
-    cmd := exec.Command("sudo", "systemctl", "restart", service + ".service")
+    if !allowedServices[service] {
+        return fmt.Errorf("servicio no permitido: %s", service)
+    }
+    cmd := exec.Command("sudo", "systemctl", "restart", service+".service")
     out, err := cmd.CombinedOutput()
     if err != nil {
         return fmt.Errorf("error al reiniciar servicio %s: %v - %s", service, err, string(out))
