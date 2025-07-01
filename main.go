@@ -311,23 +311,33 @@ func processDownload(req DownloadRequest) error {
 
 
 func downloadAndUnzip(url, zipFile, dir string) error {
-	// Descargar el archivo zip en la carpeta 'update'
-	updateDir := dir
-	filePath := filepath.Join(updateDir, zipFile)
-	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
-		return err // Si wget falla, retornamos el error
-	}
-	fmt.Println("Archivos descargados en:", updateDir)
-	cmd := exec.Command("unzip", "-o", zipFile)
+    fmt.Printf("➡️  Iniciando descarga y descompresión\n")
+    fmt.Printf("   URL: %s\n", url)
+    fmt.Printf("   Archivo ZIP: %s\n", zipFile)
+    fmt.Printf("   Carpeta destino: %s\n", dir)
 
-	cmd.Dir = dir // dir es "update"
+    updateDir := dir
+    filePath := filepath.Join(updateDir, zipFile)
+    fmt.Printf("   Ruta completa de descarga: %s\n", filePath)
 
-	// Ejecutamos el comando 'unzip' desde la carpeta 'update'
-	if err := cmd.Run(); err != nil {
-		return err // Si unzip falla, retornamos el error
-	}
+    fmt.Println("   Ejecutando: wget -O", filePath, url)
+    if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
+        fmt.Printf("❌ Error en wget: %v\n", err)
+        return fmt.Errorf("wget error: %w", err)
+    }
+    fmt.Println("   Descarga completada.")
 
-	return nil
+    fmt.Println("   Ejecutando: unzip -o", zipFile, "en", dir)
+    cmd := exec.Command("unzip", "-o", zipFile)
+    cmd.Dir = dir // dir es "update"
+
+    if err := cmd.Run(); err != nil {
+        fmt.Printf("❌ Error en unzip: %v\n", err)
+        return fmt.Errorf("unzip error: %w", err)
+    }
+    fmt.Println("   Descompresión completada.")
+
+    return nil
 }
 
 func isPathAllowed(path string) bool {
