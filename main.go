@@ -161,8 +161,8 @@ func processDownload(req DownloadRequest) error {
 			return fmt.Errorf("descargar: %w", err)
 		}
 		// Mover/reemplazar el archivo en destino
-		destPath := filepath.Join(req.RouteDestino, fileName)
-		if err := moveAndReplace(fileName, req.RouteDestino, updateDir); err != nil {
+		destPath := filepath.Join(req.RouteDestino, "")
+		if err := moveAndReplace("", req.RouteDestino, updateDir); err != nil {
 			return fmt.Errorf("mover/reemplazar: %w", err)
 		}
 		fmt.Printf("🔐 Aplicando permisos a: %s\n", destPath)
