@@ -287,13 +287,14 @@ func downloadAndUnzip(url, zipFile, dir string) error {
 	return nil
 }
 func download(url, file, dir string) error {
-	// Descargar el archivo zip en la carpeta update
-	updateDir := dir
-	filePath := filepath.Join(updateDir, file)
-	if err := exec.Command("wget", "-O", filePath, url).Run(); err != nil {
-		return err
-	}
-	return nil
+    filePath := filepath.Join(dir, file)
+    fmt.Printf("Descargando %s en %s\n", url, filePath)
+    cmd := exec.Command("sudo", "wget", "-O", filePath, url)
+    out, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("wget error: %v - %s", err, string(out))
+    }
+    return nil
 }
 
 func moveAndReplace(folder, dest string, dir string) error {
