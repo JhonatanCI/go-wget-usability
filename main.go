@@ -324,7 +324,12 @@ func setPermissions(path, perms string) error {
 
 
 func applyService(service string) error {
-	return exec.Command("sudo", "systemctl", "restart", service).Run()
+    cmd := exec.Command("sudo", "systemctl", "restart", service)
+    out, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("error al reiniciar servicio %s: %v - %s", service, err, string(out))
+    }
+    return nil
 }
 
 func createFile(path string) error {
