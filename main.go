@@ -176,9 +176,7 @@ func processDownload(req DownloadRequest) error {
 		}
 		fileName := req.NameDescomprimido // "back"
 		
-		if err := os.MkdirAll(updateDir, 0755); err != nil {
-			return fmt.Errorf("crear carpeta update: %w", err)
-		}
+		sudoMkdirAll(updateDir)
 		// Descargar el archivo
 		if err := download(req.Download, fileName, updateDir); err != nil {
 			return fmt.Errorf("descargar: %w", err)
@@ -207,9 +205,7 @@ func processDownload(req DownloadRequest) error {
 			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
 		}
 		zipFile := req.NameDescomprimido + ".zip"
-		if err := os.MkdirAll(updateDir, 0755); err != nil {
-			return fmt.Errorf("crear carpeta update: %w", err)
-		}
+		sudoMkdirAll(updateDir)
 		if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
 			return fmt.Errorf("descargar y descomprimir: %w", err)
 		}
@@ -231,9 +227,7 @@ func processDownload(req DownloadRequest) error {
 			return fmt.Errorf("ruta de control_file no permitida: %s", req.ControlFile)
 		}
 		executableName := req.NameDescomprimido
-		if err := os.MkdirAll(updateDir, 0755); err != nil {
-			return fmt.Errorf("crear carpeta update: %w", err)
-		}
+		sudoMkdirAll(updateDir)
 		if err := download(req.Download, executableName, updateDir); err != nil {
 			return fmt.Errorf("descargar ejecutable: %w", err)
 		}
@@ -280,9 +274,7 @@ func processDownload(req DownloadRequest) error {
 			}
 		}
 		zipFile := req.NameDescomprimido + ".zip"
-		if err := os.MkdirAll(updateDir, 0755); err != nil {
-			return fmt.Errorf("crear carpeta update: %w", err)
-		}
+		sudoMkdirAll(updateDir)
 		if err := downloadAndUnzip(req.Download, zipFile, updateDir); err != nil {
 			return fmt.Errorf("descargar y descomprimir: %w", err)
 		}
@@ -418,13 +410,18 @@ func createFile(path string) error {
 }
 
 func sudoMkdirAll(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		cmd := exec.Command("sudo", "mkdir", "-p", path)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
-		}
-	}
-	return nil
+    if _, err := os.Stat(path); os.IsNotExist(err) {
+        cmd := exec.Command("sudo", "mkdir", "-p", path)
+        if out, err := cmd.CombinedOutput(); err != nil {
+            return fmt.Errorf("error al crear carpeta con sudo: %v - %s", err, string(out))
+        }
+        // Asignar permisos 0777 a la carpeta creada
+        chmodCmd := exec.Command("sudo", "chmod", "-R", "0777", path)
+        if out, err := chmodCmd.CombinedOutput(); err != nil {
+            return fmt.Errorf("error al asignar permisos con sudo: %v - %s", err, string(out))
+        }
+    }
+    return nil
 }
 
 
