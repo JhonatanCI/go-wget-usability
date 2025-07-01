@@ -333,11 +333,12 @@ func applyService(service string) error {
 }
 
 func createFile(path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	return f.Close()
+    cmd := exec.Command("sudo", "touch", path)
+    out, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("error al crear archivo con sudo: %v - %s", err, string(out))
+    }
+    return nil
 }
 
 func sudoMkdirAll(path string) error {
