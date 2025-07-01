@@ -152,35 +152,30 @@ func processDownload(req DownloadRequest) error {
 
 	switch req.Type {
 	case "backend":
-		zipFile := req.NameDescomprimido
-		unzippedFolder := req.NameDescomprimido
-
+		fileName := req.NameDescomprimido // "back"
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
 			return fmt.Errorf("crear carpeta update: %w", err)
 		}
-
-		if err := download(req.Download, zipFile, updateDir); err != nil {
+		// Descargar el archivo
+		if err := download(req.Download, fileName, updateDir); err != nil {
 			return fmt.Errorf("descargar: %w", err)
 		}
-
-		destPath := filepath.Join(req.RouteDestino, unzippedFolder)
-		if err := moveAndReplace(unzippedFolder, req.RouteDestino, updateDir); err != nil {
+		// Mover/reemplazar el archivo en destino
+		destPath := filepath.Join(req.RouteDestino, fileName)
+		if err := moveAndReplace(fileName, req.RouteDestino, updateDir); err != nil {
 			return fmt.Errorf("mover/reemplazar: %w", err)
 		}
 		fmt.Printf("🔐 Aplicando permisos a: %s\n", destPath)
 		if err := setPermissions(destPath, "777"); err != nil {
 			return fmt.Errorf("permisos: %w", err)
 		}
-
 		serviceName := "filedesk-cloud." + req.Service
 		if err := applyService(serviceName); err != nil {
 			return fmt.Errorf("reiniciar servicio: %w", err)
 		}
-
 		if err := createFile(req.ControlFile); err != nil {
 			return fmt.Errorf("crear archivo de control: %w", err)
 		}
-
 	case "public":
 		zipFile := req.NameDescomprimido + ".zip"
 		if err := os.MkdirAll(updateDir, 0755); err != nil {
